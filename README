@@ -2,8 +2,8 @@ AudioRec
 Written by: Alex Skryl (askryl@enovafinancial.com)
 
 Summary:
-AudioRec's purpose is to recursively sift through large collection of misnamed
-audio files and rename them to match the info in their ID3 tags. It can also
+AudioRec's purpose is to recursively sift through a large collection of misnamed
+audio files and rename them to match the data in their respective tags. It can also
 organize the files in a temp location if directed to do so.  
 
 Requirements:
