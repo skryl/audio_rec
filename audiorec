@@ -1,0 +1,168 @@
+#!/usr/bin/env ruby
+
+require 'rubygems'
+require 'optparse'
+require 'fileutils'
+require 'find'
+require 'pp'
+# audio file libs
+require 'id3lib'
+require 'flacinfo'
+
+
+class AudioRec
+
+ALBUMS_PATH = "/tmp/albums"
+UNKNOWN = ''
+FILENAME_FORMAT = '%t'
+FORMAT_KEY_MAP = { '%a' => :artist, '%l' => :album, '%t' => :title, '%n' => :track }
+
+#ntfs renaming
+BAD_CHARS = "\"*:<>?\\|"
+SYS_CHARS = Array.new(31) {|i| "#{(i+1).chr}"}.join
+
+
+def self.options
+  @@options
+end
+
+def self.options=(opts)
+  @@options = opts
+end
+
+# Recursively iterates a directory of audio files and organizes them by their
+# tag info
+def self.organize(path)
+  verbose = options[:verbose]
+  dist = Hash.new {|h,k| h[k] = 0 }
+  puts "Found the following audio files:" if verbose
+
+  Find.find(path) do |entry|
+    dirname = File.dirname(entry) 
+    filename = File.basename(entry)
+    extname = File.extname(entry)
+
+    case extname
+    when '.flac'
+      info = flac_info(entry)
+    when '.mp3'
+      info = mp3_info(entry)
+    else next
+    end
+
+    # make changes
+    if options[:commit]
+      new_filename = format_filename(info) 
+      new_entry = "#{dirname}/#{new_filename}#{extname}"
+      album_path = "#{ALBUMS_PATH}/#{info[:album]}"
+      File.rename(entry, new_entry)
+      puts "  Renamed: #{new_entry}" if verbose
+      unless options[:rename]
+        Dir.mkdir(album_path) unless File.exists?(album_path)
+        FileUtils.move(new_entry, album_path)
+      end
+    end
+
+    # update stats and print info
+    dist[info[:album]] += 1 
+    if verbose
+      puts '---'
+      puts "  File: #{entry}"
+      info.each {|k, v| puts("  #{k.to_s.capitalize}: '#{v}'") }
+    end
+  end
+
+  # print stats
+  puts "---\n\n" if verbose
+  puts "Album Distribution:"
+  dist_sort = dist.sort_by {|i| i[1]}
+  dist_sort.each do |album, count|
+    puts "  #{album} - #{count}\n"
+  end
+end
+
+private
+
+def self.flac_info(file)
+  tags = FlacInfo.new(file).tags
+  organize_data(
+    sanitize_data(
+    [tags['artist'] || tags['ARTIST'],  
+     tags['album'] || tags['ALBUM'],  
+     tags['title'] || tags['TITLE'], 
+     tags['track'] || tags['TRACK']] 
+  ))
+end
+
+def self.mp3_info(file)
+  tag = ID3Lib::Tag.new(file)
+  organize_data(
+    sanitize_data(
+      [tag.artist, tag.album, tag.title, tag.track]
+  ))
+end
+
+def self.organize_data(data)
+   { :artist => data[0],
+     :album => data[1],
+     :title => data[2],
+     :track => data[3] }
+end
+
+def self.sanitize_data(data_arr) 
+  data_arr.map do |str|
+    if str.nil? || str.empty?
+      UNKNOWN
+    else
+      # remove all non printable characters
+      str.gsub!(/[^[:print:]]/,'')
+      # remove all ntfs unsupported chars
+      if options[:ntfs]
+        str.split(//).map {|c| (BAD_CHARS.include?(c) || SYS_CHARS.include?(c)) ? "" : c }.join
+      else str
+      end
+    end
+  end
+end
+
+def self.format_filename(info)
+  filename = FILENAME_FORMAT.dup
+  FORMAT_KEY_MAP.each do |k,v|
+    filename.gsub!(k, info[v])
+  end
+  filename
+end
+
+end
+
+##############################################################################
+
+
+options = {}
+optparse = OptionParser.new do |opts|
+  opts.banner = "Usage: audiorec [options] path"
+
+  opts.on("-c", "--commit", "Script will perform a dry run unless this option is set") { |opt| options[:commit] = true }
+  opts.on("-r", "--rename-only", "Clean up all filenames recursively (does not reorganize file heirarchy)") { |opt| options[:rename] = true }
+  opts.on("-n", "--ntfs", "Use ntfs supported filenames when renaming") { |opt| options[:ntfs] = true }
+  opts.on("-v", "--verbose", "Print info for every valid audio file found") { |opt| options[:verbose] = true }
+  opts.on("-h", "--help", "Show this message") { 
+    puts opts 
+    exit
+  }
+end
+
+begin
+  optparse.parse!(ARGV)                                                                                                                                                                                                 
+  if ARGV.empty?
+    puts optparse
+    exit
+  end
+  path = ARGV.shift
+rescue OptionParser::ParseError => e
+  puts optparse
+  exit
+end
+
+AudioRec.options = options
+AudioRec.organize(path)

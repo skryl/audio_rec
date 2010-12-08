@@ -1,0 +1,21 @@
+AudioRec
+Written by: Alex Skryl (askryl@enovafinancial.com)
+
+Summary:
+AudioRec's purpose is to recursively sift through large collection of misnamed
+audio files and rename them to match the info in their ID3 tags. It can also
+organize the files in a temp location if directed to do so.  
+
+Requirements:
+libid3-3.8.3-dev (debian lib)
+id3lib-ruby (ruby gem)
+flacinfo-rb (ruby gem)
+
+Supported Audio Formats:
+MP3
+FLAC
+
+TODO:
+- support more formats
+- allow more flexibility for organization
+- bring name formatter string CL options
